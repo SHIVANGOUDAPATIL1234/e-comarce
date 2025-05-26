@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: SSH Deploy to Server
+      - name: Test SSH connection
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -23,6 +23,14 @@ jobs:
           script: |
             echo "✅ SSH access confirmed"
 
+      - name: Deploy application
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
             # Update and install Docker if missing, non-interactive
             if ! command -v docker &> /dev/null; then
               sudo apt-get update -qq
@@ -46,9 +54,9 @@ jobs:
             git clone https://github.com/SHIVANGOUDAPATIL1234/e-comarce.git ~/e-comarce
             cd ~/e-comarce
 
-            # Pull latest Docker image (with sudo)
+            # Pull latest Docker image
             sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/e-comarce:latest
 
-            # Restart container using docker compose (with sudo)
+            # Restart container using docker compose
             sudo docker compose down -v || true
             sudo docker compose up -d
