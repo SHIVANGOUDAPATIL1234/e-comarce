@@ -1,32 +1,17 @@
-name: CI/CD Pipeline
+name: Deploy to EC2
 
 on:
   push:
-    branches: [master]
+    branches:
+      - main
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Code
         uses: actions/checkout@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/e-comarce:latest
 
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -38,30 +23,36 @@ jobs:
           script: |
             echo "✅ SSH access confirmed"
 
-            # Install Docker if not already present
+            # Kill any apt process to avoid lock
+            sudo killall apt apt-get || true
+            sudo rm -f /var/lib/dpkg/lock-frontend
+            sudo rm -f /var/cache/apt/archives/lock
+
+            # Install Docker
             if ! command -v docker &> /dev/null; then
-              sudo apt-get update
-              sudo apt-get install -y docker.io
-              sudo systemctl enable docker
-              sudo systemctl start docker
+              echo "⚙️ Installing Docker..."
+              curl -fsSL https://get.docker.com -o get-docker.sh
+              sudo sh get-docker.sh
+              sudo usermod -aG docker $USER
             fi
 
-            # Install Docker Compose v2 if missing
+            # Install Docker Compose v2
             if ! docker compose version &> /dev/null; then
+              echo "⚙️ Installing Docker Compose V2..."
               DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
               mkdir -p $DOCKER_CONFIG/cli-plugins
               curl -SL https://github.com/docker/compose/releases/download/v2.23.3/docker-compose-linux-x86_64 -o $DOCKER_CONFIG/cli-plugins/docker-compose
               chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
             fi
 
-            # Pull latest code and container image
-            rm -rf ~/e-comarce
-            git clone https://github.com/SHIVANGOUDAPATIL1234/e-comarce.git ~/e-comarce
-            cd ~/e-comarce
+            # Refresh Docker group and deploy
+            newgrp docker <<EONG
+              rm -rf ~/e-comarce
+              git clone https://github.com/SHIVANGOUDAPATIL1234/e-comarce.git ~/e-comarce
+              cd ~/e-comarce
 
-            # Pull latest Docker image
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/e-comarce:latest
+              docker pull ${{ secrets.DOCKERHUB_USERNAME }}/e-comarce:latest
 
-            # Restart with latest image
-            docker compose down -v || true
-            docker compose up -d
+              docker compose down -v || true
+              docker compose up -d
+            EONG
