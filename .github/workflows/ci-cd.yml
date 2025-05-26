@@ -35,7 +35,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # Install Docker if not already installed
+            # Install Docker if not installed
             if ! command -v docker &> /dev/null; then
               sudo apt-get update
               sudo apt-get install -y docker.io
@@ -43,32 +43,22 @@ jobs:
               sudo systemctl start docker
             fi
 
-            # Add user to docker group
-            sudo usermod -aG docker $USER
-
-            # Install Docker Compose v2 if not already installed
+            # Install Docker Compose v2
             DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
             mkdir -p $DOCKER_CONFIG/cli-plugins
             curl -SL https://github.com/docker/compose/releases/download/v2.23.3/docker-compose-linux-x86_64 -o $DOCKER_CONFIG/cli-plugins/docker-compose
             chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
 
-            # Refresh shell in docker group context
-            newgrp docker <<EONG
-              echo "Switched to docker group"
+            # Clone fresh repo
+            rm -rf ~/e-comarce
+            git clone https://github.com/SHIVANGOUDAPATIL1234/e-comarce.git ~/e-comarce
+            cd ~/e-comarce
 
-              # Stop and remove existing containers and volumes
-              docker compose -f ~/e-comarce/docker-compose.yml down -v || true
+            # Pull the latest image
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/e-comarce:latest
 
-              # Remove old application directory
-              rm -rf ~/e-comarce
+            # Bring down old containers (ignore errors)
+            docker compose down -v || true
 
-              # Clone the latest code
-              git clone https://github.com/SHIVANGOUDAPATIL1234/e-comarce.git ~/e-comarce
-              cd ~/e-comarce
-
-              # Pull the latest Docker image
-              docker pull ${{ secrets.DOCKERHUB_USERNAME }}/e-comarce:latest
-
-              # Start the application using Docker Compose
-              docker compose up -d
-            EONG
+            # Start updated app
+            docker compose up -d
