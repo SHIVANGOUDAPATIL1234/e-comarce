@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Test SSH connection
+      - name: Deploy and Configure Server via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -21,42 +21,45 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           debug: true
-          script: echo "✅ SSH access confirmed"
-
-      - name: Deploy application
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
           script: |
-            # Update and install Docker if missing, non-interactive
+            echo "✅ SSH access confirmed"
+
+            # Ensure system is up to date and Docker installed
             if ! command -v docker &> /dev/null; then
+              echo "🚀 Installing Docker..."
               sudo apt-get update -qq
               sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io
               sudo systemctl enable docker
               sudo systemctl start docker
+            else
+              echo "✅ Docker already installed"
             fi
 
             # Install Docker Compose v2 if missing
             if ! docker compose version &> /dev/null; then
+              echo "🚀 Installing Docker Compose v2..."
               DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
               mkdir -p $DOCKER_CONFIG/cli-plugins
               curl -SL https://github.com/docker/compose/releases/download/v2.23.3/docker-compose-linux-x86_64 -o $DOCKER_CONFIG/cli-plugins/docker-compose
               chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
+            else
+              echo "✅ Docker Compose v2 already installed"
             fi
 
-            # Remove old project folder
+            # Remove old project if exists
             rm -rf ~/e-comarce
 
-            # Clone latest code
+            # Clone latest code from GitHub
             git clone https://github.com/SHIVANGOUDAPATIL1234/e-comarce.git ~/e-comarce
             cd ~/e-comarce
 
-            # Pull latest Docker image
+            # Pull latest image from DockerHub
+            echo "📦 Pulling latest Docker image..."
             sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/e-comarce:latest
 
-            # Restart container using docker compose
+            # Restart container with latest image
+            echo "🔄 Restarting Docker container..."
             sudo docker compose down -v || true
             sudo docker compose up -d
+
+            echo "✅ Deployment completed"
